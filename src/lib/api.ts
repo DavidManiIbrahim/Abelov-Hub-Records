@@ -1,265 +1,259 @@
-import { HubRecord } from '@/types/database';
-import { getCache, setCache, invalidateCache } from '@/utils/storage';
+// Convex API Client - replaces REST API calls with Convex mutations and queries
+// This file provides a compatibility layer so existing code can work with minimal changes
 
-// Memory cache keys (in-memory cache only, no persistence)
-const API_BASE = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:4000/api/v1';
+import { ConvexReactClient } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { Id } from "../../convex/_generated/dataModel";
+import { HubRecord } from "@/types/database";
 
-const apiFetch = async (path: string, init?: RequestInit) => {
-  const headers = {
-    'Content-Type': 'application/json',
-  };
+// Initialize Convex client
+const convexUrl = import.meta.env.VITE_CONVEX_URL;
+if (!convexUrl) {
+  throw new Error("VITE_CONVEX_URL is not set. Run 'npx convex dev' to get your URL.");
+}
 
-  // Add Authorization header if token exists in localStorage (read freshly on each request)
-  const token = localStorage.getItem('auth_token');
-  if (token) {
-    // @ts-ignore
-    headers['Authorization'] = `Bearer ${token}`;
-    // console.log('Attached auth token:', token.substring(0, 10) + '...');
-  } else {
-    console.warn('No auth token found in localStorage for request:', path);
-  }
+export const convex = new ConvexReactClient(convexUrl);
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    credentials: 'include',
-    headers: { ...headers, ...(init?.headers || {}) },
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const errorMsg = body?.error || body?.details || `API error ${res.status}`;
-    throw new Error(errorMsg);
-  }
-  if (res.status === 204) return null;
-  return res.json();
+// Helper to get current user ID from localStorage
+const getCurrentUserId = (): Id<"users"> | null => {
+  const userId = localStorage.getItem("userId");
+  return userId as Id<"users"> | null;
 };
 
-// Service Request API - All calls go to MongoDB backend
+// Service Request API - Now using Convex
 export const serviceRequestAPI = {
-  async create(request: Omit<HubRecord, 'id' | 'created_at' | 'updated_at'>) {
-    const res = await apiFetch('/requests', {
-      method: 'POST',
-      body: JSON.stringify(request)
+  async create(request: Omit<HubRecord, "id" | "created_at" | "updated_at">) {
+    const userId = getCurrentUserId();
+    if (!userId) throw new Error("Not authenticated");
+
+    const recordId = await convex.mutation(api.hubRecords.createRecord, {
+      ...request,
+      user_id: userId,
+      product_category: request.product_category || "Other",
+      status: request.status || "Pending",
+      processing_fee: request.processing_fee || 0,
+      additional_cost: request.additional_cost || 0,
+      total_value: request.total_value || 0,
+      amount_paid: request.amount_paid || 0,
+      balance: request.balance || 0,
+      transaction_completed: request.transaction_completed || false,
+      log_timeline: request.log_timeline || [],
+      verification_confirmation: request.verification_confirmation || {
+        verified: false,
+      },
     });
-    const record = (res?.data || res) as HubRecord;
-    setCache<HubRecord>(`hub_record:${record.id}`, record);
-    if (record.user_id) {
-      invalidateCache(`hub_records:${record.user_id}`);
-      invalidateCache(`stats:${record.user_id}`);
-    }
-    invalidateCache('admin_records');
-    invalidateCache('admin_global_stats');
-    return record;
+
+    // Fetch the created record
+    const record = await convex.query(api.hubRecords.getRecordById, {
+      recordId,
+    });
+
+    return record as HubRecord;
   },
 
   async getById(id: string) {
-    const cached = getCache<HubRecord | null>(`hub_record:${id}`);
-    if (cached) return cached;
-    const res = await apiFetch(`/requests/${id}`);
-    const record = (res?.data || res) as HubRecord;
-    setCache<HubRecord>(`hub_record:${id}`, record);
-    return record;
+    const record = await convex.query(api.hubRecords.getRecordById, {
+      recordId: id as Id<"hubRecords">,
+    });
+    return record as HubRecord | null;
   },
 
   async getByUserId(userId: string) {
-    const key = `hub_records:${userId}`;
-    const cached = getCache<HubRecord[]>(key);
-    if (cached) return cached;
-    const res = await apiFetch(`/requests?user_id=${userId}`);
-    const list = (res?.data || res) as HubRecord[];
-    setCache<HubRecord[]>(key, list);
-    return list;
+    const records = await convex.query(api.hubRecords.getRecordsByUser, {
+      userId: userId as Id<"users">,
+    });
+    return records as HubRecord[];
   },
 
   async update(id: string, updates: Partial<HubRecord>) {
-    const res = await apiFetch(`/requests/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(updates)
+    await convex.mutation(api.hubRecords.updateRecord, {
+      recordId: id as Id<"hubRecords">,
+      ...updates,
     });
-    const record = (res?.data || res) as HubRecord;
-    setCache<HubRecord>(`hub_record:${record.id}`, record);
-    if (record.user_id) {
-      invalidateCache(`hub_records:${record.user_id}`);
-      invalidateCache(`stats:${record.user_id}`);
-    }
-    invalidateCache('admin_records');
-    invalidateCache('admin_global_stats');
-    return record;
+
+    // Fetch the updated record
+    const record = await convex.query(api.hubRecords.getRecordById, {
+      recordId: id as Id<"hubRecords">,
+    });
+
+    return record as HubRecord;
   },
 
   async delete(id: string) {
-    await apiFetch(`/requests/${id}`, { method: 'DELETE' });
-    invalidateCache(`hub_record:${id}`);
-    invalidateCache('admin_records');
-    invalidateCache('admin_global_stats');
-    // Invalidate all related hub record and stats caches
-    // Note: We rely on explicit cache invalidation in the calling code
+    await convex.mutation(api.hubRecords.deleteRecord, {
+      recordId: id as Id<"hubRecords">,
+    });
   },
 
   async search(userId: string, query: string) {
-    const res = await apiFetch(`/requests/search?user_id=${userId}&q=${encodeURIComponent(query)}`);
-    const list = (res?.data || res) as HubRecord[];
-    return list;
+    const records = await convex.query(api.hubRecords.searchRecords, {
+      userId: userId as Id<"users">,
+      searchQuery: query,
+    });
+    return records as HubRecord[];
   },
 
   async getByStatus(userId: string, status: string) {
-    const res = await apiFetch(`/requests?user_id=${userId}&status=${status}`);
-    const list = (res?.data || res) as HubRecord[];
-    return list;
+    const records = await convex.query(api.hubRecords.getRecordsByStatus, {
+      userId: userId as Id<"users">,
+      status: status as any,
+    });
+    return records as HubRecord[];
   },
 
   async getStats(userId: string) {
-    const key = `stats:${userId}`;
-    const cached = getCache<{ total: number; completed: number; pending: number; inProgress: number; totalRevenue: number }>(key);
-    if (cached) return cached;
-    const res = await apiFetch(`/requests/stats/${userId}`);
-    const stats = res?.data || res;
-    setCache(key, stats);
-    return stats;
+    const stats = await convex.query(api.hubRecords.getStats, {
+      userId: userId as Id<"users">,
+    });
+    return {
+      total: stats.totalRecords,
+      completed: stats.completedRecords,
+      pending: stats.pendingRecords,
+      inProgress: stats.inTransitRecords,
+      totalRevenue: stats.totalRevenue,
+      outstandingBalance: stats.outstandingBalance,
+    };
   },
 };
 
-
-// Admin API - All calls go to MongoDB backend
-export const adminAPI = {
-  async getAllUsersWithStats() {
-    const res = await apiFetch('/admin/users');
-    return (res?.data || res) as unknown[];
-  },
-
-  async getAllServiceRequests(limit = 100, offset = 0) {
-    const key = `admin_records_limit=${limit}_offset=${offset}`;
-    const cached = getCache<{ records: HubRecord[]; total: number }>(key);
-    if (cached) return cached;
-
-    const res = await apiFetch(`/admin/requests?limit=${limit}&offset=${offset}`);
-    const result = {
-      records: (res?.data || res?.requests || []) as HubRecord[],
-      total: res?.total || 0
-    };
-    setCache(key, result);
-    return result;
-  },
-
-  async getRequestsByStatus(status: string, limit = 100, offset = 0) {
-    const res = await apiFetch(`/admin/requests?status=${status}&limit=${limit}&offset=${offset}`);
-    return {
-      records: (res?.data || res?.requests || []) as HubRecord[],
-      total: res?.total || 0
-    };
-  },
-
-  async getActivityLogs(limit = 50, offset = 0) {
-    const res = await apiFetch(`/admin/logs?limit=${limit}&offset=${offset}`);
-    return {
-      logs: (res?.data || res?.logs || []) as unknown[],
-      total: res?.total || 0
-    };
-  },
-
-  async getGlobalStats() {
-    const cached = getCache<{
-      totalUsers: number;
-      totalTickets: number;
-      pendingTickets: number;
-      completedTickets: number;
-      inProgressTickets: number;
-      onHoldTickets: number;
-      totalRevenue: number;
-    }>('admin_global_stats');
-    if (cached) return cached;
-
-    const res = await apiFetch('/admin/stats');
-    const stats = res as {
-      totalUsers: number;
-      totalTickets: number;
-      pendingTickets: number;
-      completedTickets: number;
-      inProgressTickets: number;
-      onHoldTickets: number;
-      totalRevenue: number;
-    };
-    setCache('admin_global_stats', stats);
-    return stats;
-  },
-
-  async searchRequests(query: string, limit = 50, offset = 0) {
-    const res = await apiFetch(`/admin/requests/search?q=${encodeURIComponent(query)}&limit=${limit}&offset=${offset}`);
-    return {
-      records: (res?.data || res?.requests || []) as HubRecord[],
-      total: res?.total || 0
-    };
-  },
-
-  async getUserRoles(userId: string) {
-    const res = await apiFetch(`/admin/users/${userId}/roles`);
-    return (res?.data || res || []) as Array<{ role: string; assigned_at: string }>;
-  },
-
-  async assignRole(userId: string, role: string) {
-    const res = await apiFetch(`/admin/users/${userId}/roles`, {
-      method: 'POST',
-      body: JSON.stringify({ role }),
-    });
-    return res?.data || res;
-  },
-
-  async removeRole(userId: string, role: string) {
-    const res = await apiFetch(`/admin/users/${userId}/roles/${role}`, {
-      method: 'DELETE',
-    });
-    return res?.data || res;
-  },
-
-  async toggleUserStatus(userId: string, isActive: boolean) {
-    const res = await apiFetch(`/admin/users/${userId}/status`, {
-      method: 'PUT',
-      body: JSON.stringify({ is_active: isActive }),
-    });
-    return res?.data || res;
-  },
-};
-
-// Auth API - all calls go to backend, token cached after success
+// Auth API - Now using Convex
 export const authAPI = {
-  async signup(email: string, password: string, role?: 'user' | 'admin') {
-    const res = await apiFetch('/auth/signup', {
-      method: 'POST',
-      body: JSON.stringify({ email, password, role }),
+  async signup(email: string, password: string, name?: string) {
+    const result = await convex.mutation(api.auth.register, {
+      email,
+      password,
+      name,
     });
-    const user = res?.user || res;
-    return user;
+
+    // Store user ID in localStorage
+    localStorage.setItem("userId", result.userId);
+    localStorage.setItem("userEmail", result.email);
+    if (result.name) {
+      localStorage.setItem("userName", result.name);
+    }
+
+    return {
+      id: result.userId,
+      email: result.email,
+      user_metadata: {
+        name: result.name,
+      },
+    };
   },
 
   async login(email: string, password: string) {
-    const res = await apiFetch('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
+    const result = await convex.mutation(api.auth.login, {
+      email,
+      password,
     });
-    const user = res?.user || res;
-    // Attach token to user object so it can be saved in AuthContext
-    if (res?.token && typeof user === 'object') {
-      user.token = res.token;
+
+    // Store user ID in localStorage
+    localStorage.setItem("userId", result.userId);
+    localStorage.setItem("userEmail", result.email);
+    if (result.name) {
+      localStorage.setItem("userName", result.name);
     }
-    return user;
+
+    return {
+      id: result.userId,
+      email: result.email,
+      user_metadata: {
+        name: result.name,
+      },
+    };
   },
 
   async me() {
-    const res = await apiFetch('/auth/me');
-    const user = res?.user || res;
-    return user;
+    const userId = getCurrentUserId();
+    if (!userId) return null;
+
+    const user = await convex.query(api.auth.getCurrentUser, {
+      userId,
+    });
+
+    if (!user) return null;
+
+    return {
+      id: user.id,
+      email: user.email,
+      user_metadata: {
+        name: user.name,
+        role: user.role,
+      },
+    };
   },
 
   async logout() {
-    await apiFetch('/auth/logout', {
-      method: 'POST',
-    });
+    localStorage.removeItem("userId");
+    localStorage.removeItem("userEmail");
+    localStorage.removeItem("userName");
   },
 
   async updateProfile(data: { username?: string; profile_image?: string }) {
-    const res = await apiFetch('/auth/profile', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-    return res?.user || res;
+    // TODO: Implement profile update in Convex
+    console.warn("Profile update not yet implemented in Convex");
+    return null;
+  },
+};
+
+// Admin API - Placeholder (to be implemented)
+export const adminAPI = {
+  async getAllUsersWithStats() {
+    // TODO: Implement admin functions in Convex
+    console.warn("Admin API not yet implemented in Convex");
+    return [];
+  },
+
+  async getAllServiceRequests(limit = 100, offset = 0) {
+    console.warn("Admin API not yet implemented in Convex");
+    return { records: [], total: 0 };
+  },
+
+  async getRequestsByStatus(status: string, limit = 100, offset = 0) {
+    console.warn("Admin API not yet implemented in Convex");
+    return { records: [], total: 0 };
+  },
+
+  async getActivityLogs(limit = 50, offset = 0) {
+    console.warn("Admin API not yet implemented in Convex");
+    return { logs: [], total: 0 };
+  },
+
+  async getGlobalStats() {
+    console.warn("Admin API not yet implemented in Convex");
+    return {
+      totalUsers: 0,
+      totalTickets: 0,
+      pendingTickets: 0,
+      completedTickets: 0,
+      inProgressTickets: 0,
+      onHoldTickets: 0,
+      totalRevenue: 0,
+    };
+  },
+
+  async searchRequests(query: string, limit = 50, offset = 0) {
+    console.warn("Admin API not yet implemented in Convex");
+    return { records: [], total: 0 };
+  },
+
+  async getUserRoles(userId: string) {
+    console.warn("Admin API not yet implemented in Convex");
+    return [];
+  },
+
+  async assignRole(userId: string, role: string) {
+    console.warn("Admin API not yet implemented in Convex");
+    return null;
+  },
+
+  async removeRole(userId: string, role: string) {
+    console.warn("Admin API not yet implemented in Convex");
+    return null;
+  },
+
+  async toggleUserStatus(userId: string, isActive: boolean) {
+    console.warn("Admin API not yet implemented in Convex");
+    return null;
   },
 };

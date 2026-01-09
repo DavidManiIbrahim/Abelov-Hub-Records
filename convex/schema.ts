@@ -23,7 +23,9 @@ export default defineSchema({
             v.literal("Electronics"),
             v.literal("Consumer Goods"),
             v.literal("Industrial"),
-            v.literal("Other")
+            v.literal("Other"),
+            v.literal("Student"),
+            v.literal("Internet")
         ),
         batch_sku: v.optional(v.string()),
         serial_number: v.optional(v.string()),
@@ -41,7 +43,9 @@ export default defineSchema({
             v.literal("Received"),
             v.literal("Verified"),
             v.literal("Sold"),
-            v.literal("Damaged")
+            v.literal("Damaged"),
+            v.literal("Active"),
+            v.literal("Completed")
         ),
         processing_fee: v.number(),
         additional_cost: v.number(),

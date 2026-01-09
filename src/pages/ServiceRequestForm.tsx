@@ -624,7 +624,7 @@ export default function ServiceRequestForm() {
 
             <img src={abelovLogo} alt="Abelov Logo" className="w-12 rounded-3xl h-12" />
             <div>
-              <h1 className="text-2xl font-bold text-primary">Abelov Hub Records</h1>
+              <h1 className="text-2xl font-bold text-primary">Abelov IT Academy</h1>
               <p className="text-sm text-muted-foreground mt-1">{user?.email}</p>
             </div>
           </div>

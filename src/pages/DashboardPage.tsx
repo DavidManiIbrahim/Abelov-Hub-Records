@@ -195,7 +195,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-4">
             <img src={abelovLogo} alt="Abelov Logo" className="w-12 rounded-3xl h-12" />
             <div>
-              <h1 className="text-2xl font-bold text-primary">Abelov Hub Records</h1>
+              <h1 className="text-2xl font-bold text-primary">Abelov IT Academy</h1>
               <p className="text-sm text-muted-foreground">{user?.email}</p>
             </div>
           </div>

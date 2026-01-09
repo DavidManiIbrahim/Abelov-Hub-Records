@@ -1,5 +1,5 @@
 {
-  "name": "abelov-hub-records",
+  "name": "abelov-it-academy",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -11,7 +11,7 @@
     "server": "npm run dev --prefix server",
     "preview": "vite preview",
     "convex:dev": "npx convex dev",
-    "dev:all": "npm run convex:dev & npm run dev"
+    "dev:all": "concurrently \"npm run convex:dev\" \"npm run dev\""
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -48,6 +48,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "convex": "^1.31.3",
     "date-fns": "^3.6.0",
     "embla-carousel-react": "^8.6.0",
     "html2canvas": "^1.4.1",

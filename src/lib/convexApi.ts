@@ -2,8 +2,8 @@
 // This file provides a compatibility layer so existing code can work with minimal changes
 
 import { ConvexReactClient } from "convex/react";
-import { api } from "../convex/_generated/api";
-import { Id } from "../convex/_generated/dataModel";
+import { api } from "../../convex/_generated/api";
+import { Id } from "../../convex/_generated/dataModel";
 import { HubRecord } from "@/types/database";
 
 // Initialize Convex client

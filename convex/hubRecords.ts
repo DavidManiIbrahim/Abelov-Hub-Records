@@ -79,8 +79,8 @@ export const getRecordsByUser = query({
         return records.map((record) => ({
             ...record,
             id: record._id,
-            created_at: record._creationTime,
-            updated_at: record._creationTime,
+            created_at: new Date(record._creationTime).toISOString(),
+            updated_at: new Date(record._creationTime).toISOString(),
         }));
     },
 });
@@ -100,8 +100,8 @@ export const getRecordById = query({
         return {
             ...record,
             id: record._id,
-            created_at: record._creationTime,
-            updated_at: record._creationTime,
+            created_at: new Date(record._creationTime).toISOString(),
+            updated_at: new Date(record._creationTime).toISOString(),
         };
     },
 });
@@ -224,8 +224,8 @@ export const searchRecords = query({
         return filtered.map((record) => ({
             ...record,
             id: record._id,
-            created_at: record._creationTime,
-            updated_at: record._creationTime,
+            created_at: new Date(record._creationTime).toISOString(),
+            updated_at: new Date(record._creationTime).toISOString(),
         }));
     },
 });
@@ -254,8 +254,8 @@ export const getRecordsByStatus = query({
         return records.map((record) => ({
             ...record,
             id: record._id,
-            created_at: record._creationTime,
-            updated_at: record._creationTime,
+            created_at: new Date(record._creationTime).toISOString(),
+            updated_at: new Date(record._creationTime).toISOString(),
         }));
     },
 });

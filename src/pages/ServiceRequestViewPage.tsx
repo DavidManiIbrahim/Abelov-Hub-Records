@@ -225,7 +225,7 @@ export default function ServiceRequestViewPage() {
           {/* Print Header */}
 
           <div className="print-show mb-6 text-center hidden">
-            <h1 className="text-2xl font-bold mb-1">Abelov Hub Records</h1>
+            <h1 className="text-2xl font-bold mb-1">Abelov IT Academy</h1>
             <p className="text-sm text-muted-foreground">Product Verification Report</p>
             <hr className="my-4" />
           </div>
