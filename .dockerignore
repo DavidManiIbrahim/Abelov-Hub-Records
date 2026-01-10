@@ -1,0 +1,25 @@
+
+# Node modules
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Build output
+dist
+dist-ssr
+
+# Environment variables
+.env
+.env.local
+
+# Editor directories
+.vscode
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Convex generated files (they should be generated during build)
+convex/_generated
