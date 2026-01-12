@@ -22,4 +22,4 @@ dist-ssr
 *.sw?
 
 # Convex generated files (they should be generated during build)
-convex/_generated
+# convex/_generated
